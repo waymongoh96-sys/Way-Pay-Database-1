@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Copy of Way-Pay HR System",
+  "description": "A comprehensive HR and payroll management system specifically designed for Malaysian tuition centers, featuring EPF, SOCSO, EIS, PCB calculations, leave tracking, and EA form preparation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
