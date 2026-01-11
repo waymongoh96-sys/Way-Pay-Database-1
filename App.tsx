@@ -1116,7 +1116,6 @@ export default function App() {
             </div>
           )}
         </div>
-      </aside>
 
       {/* MODALS */}
       {showEAModal && (
@@ -1461,12 +1460,12 @@ export default function App() {
 
       {showAddClaimModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
-          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-fade-in">
             <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-800 dark:text-white">Submit Reimbursement</h2><button type="button" onClick={() => setShowAddClaimModal(false)} className="dark:text-white"><X/></button></div>
             <form onSubmit={handleAddClaim} className="space-y-6">
-              {currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
-              <input required type="number" step="0.01" placeholder="Amount RM" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-black text-2xl bg-white dark:bg-slate-800" value={newClaim.amount || ''} onChange={e => setNewClaim({...newClaim, amount: parseFloat(e.target.value) || 0})} />
-              <textarea required placeholder="Description" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32 bg-white dark:bg-slate-800" value={newClaim.description} onChange={e => setNewClaim({...newClaim, description: e.target.value})} />
+              {currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
+              <input required type="number" step="0.01" placeholder="Amount RM" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-black text-2xl" value={newClaim.amount || ''} onChange={e => setNewClaim({...newClaim, amount: parseFloat(e.target.value) || 0})} />
+              <textarea required placeholder="Description" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32" value={newClaim.description} onChange={e => setNewClaim({...newClaim, description: e.target.value})} />
               
               <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center">
                 <input type="file" id="claim-receipt" className="hidden" accept="image/*,.pdf" onChange={handleClaimFileUpload} />
@@ -1481,6 +1480,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </main> {/* <--- INSERT THIS LINE HERE */}
     </div>
   );
 }
