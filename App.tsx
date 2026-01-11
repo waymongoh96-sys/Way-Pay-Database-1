@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Users, CreditCard, Calendar, FileText, LayoutDashboard, Plus, MessageSquare, AlertCircle, Menu, X, TrendingUp, Clock, Printer, Download, Info, Edit, Upload, CheckCircle, DollarSign, Settings as SettingsIcon, ArrowUpRight, History, Check, RefreshCw, FileUp, Trash, Filter, ReceiptText, Ban, Activity, PieChart, ImageIcon, LogOut, Lock, User, ChevronRight, ShieldCheck, Briefcase, RotateCcw, Search, CalendarClock, DownloadCloud, UploadCloud, File, Save, Eye, HardDrive, Link as LinkIcon, Image as ImageIconLucide, AlertTriangle
@@ -27,13 +28,12 @@ import { initDriveApi, authenticateDrive, uploadToDrive, isDriveConnected } from
 // Firebase Configuration Placeholder
 // REPLACE THIS WITH YOUR REAL KEYS FROM FIREBASE CONSOLE
 const firebaseConfig = {
-  apiKey: "AIzaSyCK4f5NiYZ4WAcErl1-Ts4J-Pit1abl748",
-  authDomain: "hr-system-46e00.firebaseapp.com",
-  projectId: "hr-system-46e00",
-  storageBucket: "hr-system-46e00.firebasestorage.app",
-  messagingSenderId: "868038807384",
-  appId: "1:868038807384:web:6ece4c7400c7f7f72e5f2d",
-  measurementId: "G-M74HXBGK63"
+  apiKey: "PASTE_YOUR_API_KEY_HERE",
+  authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+  projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+  storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+  appId: "PASTE_YOUR_APP_ID_HERE"
 };
 
 // Initialize Firebase
@@ -106,14 +106,14 @@ const StatCard = ({ title, value, subValue, icon, color }: { title: string, valu
         <p className="text-[9px] md:text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 md:mb-2 truncate">{title}</p>
         <h4 className="text-base md:text-2xl font-black text-slate-800 dark:text-white tracking-tight break-words">{value}</h4>
     </div>
-    {subValue && <p className="text-[8px] md:text-xs font-bold text-slate-400 dark:text-slate-500 mt-1 md:mt-2 truncate">{subValue}</p>}
+    {subValue && <p className="text-[8px] md:text-xs font-bold text-slate-400 dark:text-slate-50 mt-1 md:mt-2 truncate">{subValue}</p>}
   </div>
 );
 
 const BalanceBar = ({ label, current, total, color }: { label: string, current: number, total: number, color: string }) => (
   <div>
     <div className="flex justify-between mb-2">
-      <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest">{label}</span>
+      <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-50 tracking-widest">{label}</span>
       <span className="text-[10px] font-black text-slate-600 dark:text-slate-300">{current} / {total} Days</span>
     </div>
     <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -214,7 +214,7 @@ export default function App() {
   const [payrollInputs, setPayrollInputs] = useState<Record<string, { allowance: number, bonus: number, overtime: number, otherDeductions: number, pcb: number, daysWorked: number, unpaidDays: number }>>({});
 
   const [newEmp, setNewEmp] = useState<Partial<Employee>>({
-    name: '', nric: '', position: '', basicSalary: 0, status: 'ACTIVE', epfNumber: '', taxNumber: '', bankAccountNumber: '',
+    name: '', nric: '', password: '', position: '', basicSalary: 0, status: 'ACTIVE', epfNumber: '', taxNumber: '', bankAccountNumber: '',
     maritalStatus: 'SINGLE', children: 0, joinDate: new Date().toISOString().split('T')[0], leaveBalance: { annual: 12, sick: 14, emergency: 3, annualUsed: 0, sickUsed: 0, emergencyUsed: 0 }
   });
 
@@ -240,21 +240,23 @@ export default function App() {
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     const role = formData.get('role') as UserRole;
     const identifier = formData.get('identifier') as string;
+    const password = formData.get('password') as string;
 
     if (role === 'SUPER_ADMIN') {
-      if (identifier === 'admin') {
+      // Default admin login: ID "admin", Password "admin123"
+      if (identifier === 'admin' && password === 'admin123') {
         setCurrentUser({ id: '0', name: 'Super Admin', role: 'SUPER_ADMIN' });
         setLoginError('');
       } else {
-        setLoginError('Invalid Admin ID.');
+        setLoginError('Invalid Admin ID or Password.');
       }
     } else {
-      const emp = employees.find(e => e.nric === identifier && e.status === 'ACTIVE');
+      const emp = employees.find(e => e.nric === identifier && (e.password || e.nric) === password && e.status === 'ACTIVE');
       if (emp) {
         setCurrentUser({ id: emp.id, name: emp.name, role: 'TEACHER' });
         setLoginError('');
       } else {
-        setLoginError('Invalid NRIC or inactive staff record.');
+        setLoginError('Invalid NRIC or Password.');
       }
     }
   };
@@ -316,13 +318,14 @@ export default function App() {
     try {
       const employeeData = {
         ...newEmp,
+        password: newEmp.password || newEmp.nric, // Default to NRIC if no password set
         salaryHistory: [{ date: new Date().toISOString(), amount: newEmp.basicSalary || 0, reason: 'Joined' }],
         documents: [],
         isMalaysian: true,
       };
       await addDoc(collection(db, "employees"), employeeData);
       setNewEmp({
-        name: '', nric: '', position: '', basicSalary: 0, status: 'ACTIVE', epfNumber: '', taxNumber: '', bankAccountNumber: '',
+        name: '', nric: '', password: '', position: '', basicSalary: 0, status: 'ACTIVE', epfNumber: '', taxNumber: '', bankAccountNumber: '',
         maritalStatus: 'SINGLE', children: 0, joinDate: new Date().toISOString().split('T')[0], leaveBalance: { annual: 12, sick: 14, emergency: 3, annualUsed: 0, sickUsed: 0, emergencyUsed: 0 }
       });
       setShowAddEmployee(false);
@@ -685,7 +688,17 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Access Credential (NRIC / ID)</label>
-              <input name="identifier" type="text" placeholder="NRIC or Admin ID" className="w-full border-2 border-slate-100 rounded-2xl p-4 font-bold focus:border-indigo-500 outline-none transition-all" required />
+              <div className="relative">
+                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400"><User size={20}/></div>
+                 <input name="identifier" type="text" placeholder="NRIC or Admin ID" className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" required />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
+              <div className="relative">
+                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400"><Lock size={20}/></div>
+                 <input name="password" type="password" placeholder="••••••••" className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" required />
+              </div>
             </div>
             <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all">Secure Login</button>
           </form>
@@ -1102,6 +1115,7 @@ export default function App() {
             </div>
           )}
         </div>
+      </aside>
 
       {/* MODALS */}
       {showEAModal && (
@@ -1168,8 +1182,10 @@ export default function App() {
                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Full Name</label><input required className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" value={editingEmployee?.name || newEmp.name} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, name: e.target.value}) : setNewEmp({...newEmp, name: e.target.value})} /></div>
                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">NRIC / IC</label><input required className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" value={editingEmployee?.nric || newEmp.nric} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, nric: e.target.value}) : setNewEmp({...newEmp, nric: e.target.value})} /></div>
                    
+                   <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Assign Password</label><input className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" type="text" placeholder="Default is NRIC" value={editingEmployee?.password || newEmp.password} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, password: e.target.value}) : setNewEmp({...newEmp, password: e.target.value})} /></div>
+
                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Tax Category</label>
-                     <select className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white" value={editingEmployee?.maritalStatus || newEmp.maritalStatus} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, maritalStatus: e.target.value as any}) : setNewEmp({...newEmp, maritalStatus: e.target.value as any})}>
+                     <select className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" value={editingEmployee?.maritalStatus || newEmp.maritalStatus} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, maritalStatus: e.target.value as any}) : setNewEmp({...newEmp, maritalStatus: e.target.value as any})}>
                         <option value="SINGLE">Single / Widow / Widower</option>
                         <option value="MARRIED_SPOUSE_WORKING">Married (Spouse Working)</option>
                         <option value="MARRIED_SPOUSE_NOT_WORKING">Married (Spouse Not Working)</option>
@@ -1178,7 +1194,7 @@ export default function App() {
                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">No. of Children</label><input type="number" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" value={editingEmployee?.children || newEmp.children} onChange={e => editingEmployee ? setEditingEmployee({...editingEmployee, children: parseInt(e.target.value) || 0}) : setNewEmp({...newEmp, children: parseInt(e.target.value) || 0})} /></div>
 
                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Status</label>
-                     <select className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white" value={editingEmployee?.status || newEmp.status} onChange={e => {
+                     <select className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" value={editingEmployee?.status || newEmp.status} onChange={e => {
                          const val = e.target.value as 'ACTIVE' | 'RESIGNED';
                          const today = new Date().toISOString().split('T')[0];
                          if (editingEmployee) {
@@ -1439,17 +1455,17 @@ export default function App() {
       )}
 
       {showAddLeaveModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6"><div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-xl p-10 shadow-2xl animate-fade-in"><div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-800 dark:text-white">Apply Leave</h2><button type="button" onClick={() => setShowAddLeaveModal(false)} className="dark:text-white"><X/></button></div><form onSubmit={handleAddLeave} className="space-y-6">{currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}<select name="type" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold"><option value={LeaveType.ANNUAL}>Annual</option><option value={LeaveType.SICK}>Sick</option><option value={LeaveType.EMERGENCY}>Emergency</option></select><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-900 dark:text-white ml-1">Start Date</label><input name="startDate" type="date" className="w-full p-4 border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl font-bold" required /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-900 dark:text-white ml-1">End Date</label><input name="endDate" type="date" className="w-full p-4 border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl font-bold" required /></div></div><input name="days" type="number" step="0.5" placeholder="Total Days" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" required /><textarea name="reason" placeholder="Reason" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32" required /><button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl">Submit Application</button></form></div></div>
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6"><div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-xl p-10 shadow-2xl animate-fade-in"><div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-800 dark:text-white">Apply Leave</h2><button type="button" onClick={() => setShowAddLeaveModal(false)} className="dark:text-white"><X/></button></div><form onSubmit={handleAddLeave} className="space-y-6">{currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}<select name="type" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800"><option value={LeaveType.ANNUAL}>Annual</option><option value={LeaveType.SICK}>Sick</option><option value={LeaveType.EMERGENCY}>Emergency</option></select><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-900 dark:text-white ml-1">Start Date</label><input name="startDate" type="date" className="w-full p-4 border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl font-bold bg-white dark:bg-slate-800" required /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-900 dark:text-white ml-1">End Date</label><input name="endDate" type="date" className="w-full p-4 border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl font-bold bg-white dark:bg-slate-800" required /></div></div><input name="days" type="number" step="0.5" placeholder="Total Days" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" required /><textarea name="reason" placeholder="Reason" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32 bg-white dark:bg-slate-800" required /><button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl">Submit Application</button></form></div></div>
       )}
 
       {showAddClaimModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-fade-in">
             <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-800 dark:text-white">Submit Reimbursement</h2><button type="button" onClick={() => setShowAddClaimModal(false)} className="dark:text-white"><X/></button></div>
             <form onSubmit={handleAddClaim} className="space-y-6">
-              {currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
-              <input required type="number" step="0.01" placeholder="Amount RM" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-black text-2xl" value={newClaim.amount || ''} onChange={e => setNewClaim({...newClaim, amount: parseFloat(e.target.value) || 0})} />
-              <textarea required placeholder="Description" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32" value={newClaim.description} onChange={e => setNewClaim({...newClaim, description: e.target.value})} />
+              {currentUser.role === 'SUPER_ADMIN' && <select name="employeeId" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold bg-white dark:bg-slate-800" required>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
+              <input required type="number" step="0.01" placeholder="Amount RM" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-black text-2xl bg-white dark:bg-slate-800" value={newClaim.amount || ''} onChange={e => setNewClaim({...newClaim, amount: parseFloat(e.target.value) || 0})} />
+              <textarea required placeholder="Description" className="w-full border-2 border-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-2xl p-4 font-bold h-32 bg-white dark:bg-slate-800" value={newClaim.description} onChange={e => setNewClaim({...newClaim, description: e.target.value})} />
               
               <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center">
                 <input type="file" id="claim-receipt" className="hidden" accept="image/*,.pdf" onChange={handleClaimFileUpload} />
@@ -1464,7 +1480,6 @@ export default function App() {
           </div>
         </div>
       )}
-      </main> {/* <--- INSERT THIS LINE HERE */}
     </div>
   );
 }

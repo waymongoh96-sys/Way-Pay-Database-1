@@ -35,6 +35,7 @@ export interface Employee {
   id: string;
   name: string;
   nric: string;
+  password?: string; // Added for secure login
   position: string;
   basicSalary: number;
   joinDate: string;
