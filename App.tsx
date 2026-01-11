@@ -28,13 +28,13 @@ import { initDriveApi, authenticateDrive, uploadToDrive, isDriveConnected } from
 // Firebase Configuration Placeholder
 // REPLACE THIS WITH YOUR REAL KEYS FROM FIREBASE CONSOLE
 const firebaseConfig = {
-  apiKey: "AIzaSyCK4f5NiYZ4WAcErl1-Ts4J-Pit1abl748",
-  authDomain: "hr-system-46e00.firebaseapp.com",
-  projectId: "hr-system-46e00",
-  storageBucket: "hr-system-46e00.firebasestorage.app",
-  messagingSenderId: "868038807384",
-  appId: "1:868038807384:web:6ece4c7400c7f7f72e5f2d",
-  measurementId: "G-M74HXBGK63"
+  apiKey: "AIzaSyCReAMYik0FwLNA-RXWUZI_QyvAweJx4jE",
+  authDomain: "database1-2e069.firebaseapp.com",
+  projectId: "database1-2e069",
+  storageBucket: "database1-2e069.firebasestorage.app",
+  messagingSenderId: "414667734668",
+  appId: "1:414667734668:web:8d1762f418f06452d305a9",
+  measurementId: "G-S4CD6VXK6L"
 };
 
 // Initialize Firebase
