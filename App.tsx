@@ -1464,6 +1464,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </main> {/* <--- INSERT THIS LINE HERE */}
     </div>
   );
 }
