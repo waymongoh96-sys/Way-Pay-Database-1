@@ -1,17 +1,11 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Users, CreditCard, Calendar, FileText, LayoutDashboard, Plus, MessageSquare, AlertCircle, Menu, X, TrendingUp, Clock, Printer, Download, Info, Edit, Upload, CheckCircle, DollarSign, Settings as SettingsIcon, ArrowUpRight, History, Check, RefreshCw, FileUp, Trash, Filter, ReceiptText, Ban, Activity, PieChart, ImageIcon, LogOut, Lock, User, ChevronRight, ShieldCheck, Briefcase, RotateCcw, Search, CalendarClock, DownloadCloud, UploadCloud, File, Save, Eye, HardDrive, Link as LinkIcon, Image as ImageIconLucide, AlertTriangle
 } from 'lucide-react';
 
-// --- 1. FIREBASE IMPORTS (Updated) ---
+// Firebase Imports
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  User as FirebaseUser
-} from 'firebase/auth'; // Added Auth imports
 import { 
   getFirestore, 
   collection, 
@@ -23,8 +17,7 @@ import {
   deleteDoc, 
   updateDoc, 
   orderBy,
-  Timestamp,
-  where // Added 'where' for filtering
+  Timestamp
 } from 'firebase/firestore';
 
 import { Employee, LeaveRecord, PayrollRecord, LeaveType, EmployeeDocument, SystemSettings, ClaimRecord } from './types';
@@ -32,7 +25,7 @@ import { calculateStatutory, formatCurrency, getDaysInMonth } from './payrollUti
 import { askHRAssistant } from './geminiService';
 import { initDriveApi, authenticateDrive, uploadToDrive, isDriveConnected } from './googleDriveService';
 
-// --- 2. FIREBASE CONFIG ---
+// Firebase Configuration Placeholder
 // REPLACE THIS WITH YOUR REAL KEYS FROM FIREBASE CONSOLE
 const firebaseConfig = {
   apiKey: "AIzaSyCK4f5NiYZ4WAcErl1-Ts4J-Pit1abl748",
@@ -47,25 +40,37 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app); // Initialize Auth
+
+const STORAGE_KEYS = {
+  AUTH: 'waypay_current_user'
+};
 
 const INITIAL_SETTINGS: SystemSettings = {
   companyName: 'Way-Pay HR',
   registrationNumber: '202401012345 (1234567-T)',
   address: 'No. 12, Jalan Education 1, 47100 Puchong, Selangor',
   leaveApprover: 'Management Board',
-  supportedYears: [2023, 2024, 2025, 2026]
+  supportedYears: [2023, 2024, 2025]
+};
+
+// Robust State Loader for Auth only
+const loadState = <T,>(key: string, fallback: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved || saved === "undefined" || saved === "null") return fallback;
+    return JSON.parse(saved);
+  } catch (e) {
+    return fallback;
+  }
 };
 
 type UserRole = 'SUPER_ADMIN' | 'TEACHER';
 type StaffFilter = 'ALL' | 'ACTIVE' | 'RESIGNED';
 
-// Updated CurrentUser interface to match Firebase structure better
 interface CurrentUser {
-  id: string; // Will store Firebase UID or Employee ID
+  id: string;
   name: string;
   role: UserRole;
-  email: string;
 }
 
 const readFileAsBase64 = (file: File): Promise<string> => {
@@ -77,13 +82,15 @@ const readFileAsBase64 = (file: File): Promise<string> => {
   });
 };
 
+/**
+ * Helper to add ordinal suffix to numbers (1st, 2nd, 3rd, etc.)
+ */
 const getOrdinal = (n: number) => {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-// --- UI COMPONENTS ---
 const NavItem = ({ active, onClick, icon, label, collapsed }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, collapsed: boolean }) => (
   <button type="button" onClick={onClick} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all duration-300 group ${active ? 'bg-indigo-600 shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-900 dark:hover:bg-slate-800'}`}>
     <div className={`transition-colors ${active ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400'}`}>{icon}</div>
@@ -116,10 +123,8 @@ const BalanceBar = ({ label, current, total, color }: { label: string, current: 
   </div>
 );
 
-// --- MAIN APP COMPONENT ---
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true); // New state for loading
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => loadState(STORAGE_KEYS.AUTH, null));
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'employees' | 'payroll' | 'leaves' | 'claims' | 'ai' | 'settings'>('dashboard');
   
@@ -129,137 +134,69 @@ export default function App() {
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
 
-  // --- 3. AUTH LISTENER & DATA LOADING ---
+  // Firestore Listeners
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // --- LOGGED IN LOGIC ---
-        const adminEmail = "admin@waypay.hr"; // CHANGE THIS TO YOUR ADMIN EMAIL
-        
-        if (firebaseUser.email === adminEmail) {
-          setCurrentUser({
-            id: 'SUPER_ADMIN',
-            name: 'System Administrator',
-            role: 'SUPER_ADMIN',
-            email: firebaseUser.email
-          });
-          loadAdminData(); // Load EVERYTHING for admin
-        } else {
-          // Employee Login (via IC@waypay.hr)
-          const icNumber = firebaseUser.email?.split('@')[0] || "";
-          
-          // We need to fetch the Employee Profile from Firestore to get their Name & ID
-          // Note: This requires the employee to be in the 'employees' collection already
-          setCurrentUser({
-            id: icNumber, // Temporarily use IC until data loads
-            name: 'Loading...', 
-            role: 'TEACHER',
-            email: firebaseUser.email || ""
-          });
-          loadEmployeeData(icNumber);
-        }
-      } else {
-        // --- LOGGED OUT ---
-        setCurrentUser(null);
-        setEmployees([]);
-        setLeaves([]);
-        setClaims([]);
-        setPayrollRecords([]);
-      }
-      setLoadingAuth(false);
-    });
-
-    // Safety Timer: If Firebase is slow, force the screen to load after 3 seconds
-    const safetyTimer = setTimeout(() => {
-        setLoadingAuth(false);
-    }, 3000);
-
-    return () => {
-        unsubscribeAuth();
-        clearTimeout(safetyTimer);
-    };
-  }, []);
-
-  // --- DATA LOADING FUNCTIONS ---
-  const loadAdminData = () => {
-    // 1. Listen for ALL Employees
-    onSnapshot(collection(db, "employees"), (snapshot) => {
+    // Listen for Employees
+    const unsubscribeEmployees = onSnapshot(collection(db, "employees"), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee));
       setEmployees(data);
     });
 
-    // 2. Listen for ALL Requests
-    onSnapshot(query(collection(db, "requests"), orderBy("date", "desc")), (snapshot) => {
+    // Listen for Requests (Leaves and Claims)
+    const unsubscribeRequests = onSnapshot(query(collection(db, "requests"), orderBy("date", "desc")), (snapshot) => {
       const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLeaves(allRequests.filter(r => r.category === 'leave') as any);
-      setClaims(allRequests.filter(r => r.category === 'claim') as any);
+      const leaveData = allRequests.filter(r => r.category === 'leave') as unknown as LeaveRecord[];
+      const claimData = allRequests.filter(r => r.category === 'claim') as unknown as ClaimRecord[];
+      setLeaves(leaveData);
+      setClaims(claimData);
     });
 
-    // 3. Listen for ALL Payroll
-    onSnapshot(collection(db, "payroll"), (snapshot) => {
-      setPayrollRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayrollRecord)));
+    // Listen for Payroll
+    const unsubscribePayroll = onSnapshot(collection(db, "payroll"), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayrollRecord));
+      setPayrollRecords(data);
     });
 
-    // 4. Settings
-    onSnapshot(doc(db, "system", "settings"), (docSnap) => {
-      if (docSnap.exists()) setSettings(docSnap.data() as SystemSettings);
-    });
-  };
-
-const loadEmployeeData = (icNumber: string) => {
-    // 1. Find Employee Profile by IC to get real ID and Name
-    const q = query(collection(db, "employees"), where("nric", "==", icNumber));
-    onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const empData = snapshot.docs[0].data() as Employee;
-        const empId = snapshot.docs[0].id;
-        
-        // Update Current User with real Name and Firestore ID
-        setCurrentUser(prev => prev ? { ...prev, id: empId, name: empData.name } : null);
-        setEmployees([{ id: empId, ...empData }]); 
+    // Listen for Settings
+    const unsubscribeSettings = onSnapshot(doc(db, "system", "settings"), (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as SystemSettings);
+      } else {
+        setDoc(doc(db, "system", "settings"), INITIAL_SETTINGS);
       }
     });
 
-    // 2. Listen for MY Requests (Filter by IC OR ID to be safe)
-    onSnapshot(query(collection(db, "requests"), orderBy("date", "desc")), (snapshot) => {
-       const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-       
-       // SMART FILTER: Check both NRIC and ID matches
-       const myLeaves = allRequests.filter((r: any) => 
-         r.category === 'leave' && (r.nric === icNumber || r.employeeId === currentUser?.id)
-       );
-       const myClaims = allRequests.filter((r: any) => 
-         r.category === 'claim' && (r.nric === icNumber || r.employeeId === currentUser?.id)
-       );
-
-       setLeaves(myLeaves);
-       setClaims(myClaims);
-    });
-    
-     // 3. Payroll (Smart Filter)
-     onSnapshot(collection(db, "payroll"), (snapshot) => {
-        const allPayroll = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayrollRecord));
-        // Filter explicitly by the IC Number derived from login
-        setPayrollRecords(allPayroll.filter(p => p.employeeId === currentUser?.id || (p as any).nric === icNumber));
-     });
-  };
+    return () => {
+      unsubscribeEmployees();
+      unsubscribeRequests();
+      unsubscribePayroll();
+      unsubscribeSettings();
+    };
+  }, []);
 
   const [tempSettings, setTempSettings] = useState<SystemSettings>(settings);
   const [driveConnected, setDriveConnected] = useState(false);
+  
   const [newYearInput, setNewYearInput] = useState('');
 
-  // Sidebar State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
-  // Login State
-  const [loginIdentifier, setLoginIdentifier] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState('');
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(currentUser));
+    else localStorage.removeItem(STORAGE_KEYS.AUTH);
+  }, [currentUser]);
 
-  // Modals & UI State
+  useEffect(() => {
+    setTempSettings(settings);
+    if (settings.googleDriveClientId) {
+      initDriveApi(settings.googleDriveClientId).then(() => {}).catch(err => console.error("Drive Init Error", err));
+    }
+  }, [settings]);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [aiQuery, setAiQuery] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [showAddLeaveModal, setShowAddLeaveModal] = useState(false);
@@ -268,9 +205,11 @@ const loadEmployeeData = (icNumber: string) => {
   const [selectedEmployeeProfile, setSelectedEmployeeProfile] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [staffFilter, setStaffFilter] = useState<StaffFilter>('ACTIVE');
+
   const [showEAModal, setShowEAModal] = useState(false);
   const [selectedEAEmployee, setSelectedEAEmployee] = useState<Employee | null>(null);
   const [eaYear, setEaYear] = useState(new Date().getFullYear());
+
   const [processMonth, setProcessMonth] = useState(new Date().getMonth() + 1);
   const [processYear, setProcessYear] = useState(new Date().getFullYear());
   const [payrollInputs, setPayrollInputs] = useState<Record<string, { allowance: number, bonus: number, overtime: number, otherDeductions: number, pcb: number, daysWorked: number, unpaidDays: number }>>({});
@@ -297,41 +236,37 @@ const loadEmployeeData = (icNumber: string) => {
     return employees.filter(e => e.status === staffFilter);
   }, [employees, staffFilter]);
 
-  // --- 4. NEW LOGIN HANDLER ---
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
-    
-    try {
-      let emailToUse = loginIdentifier;
-      
-      // If user enters just "admin"
-      if (loginIdentifier.toLowerCase() === 'admin') {
-         emailToUse = "admin@waypay.hr"; // Ensure this matches Firebase User
-      } 
-      // If user enters IC Number (e.g. 900101...), append domain
-      else if (!loginIdentifier.includes('@')) {
-         emailToUse = loginIdentifier + "@waypay.hr";
-      }
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const role = formData.get('role') as UserRole;
+    const identifier = formData.get('identifier') as string;
+    const password = formData.get('password') as string;
 
-      await signInWithEmailAndPassword(auth, emailToUse, loginPassword);
-      // Success! The useEffect listener will handle the redirect and state update
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/invalid-credential') {
-        setLoginError('Invalid ID or Password. Check your Firebase Users.');
+    if (role === 'SUPER_ADMIN') {
+      // Default admin login: ID "admin", Password "admin123"
+      if (identifier === 'admin' && password === 'admin123') {
+        setCurrentUser({ id: '0', name: 'Super Admin', role: 'SUPER_ADMIN' });
+        setLoginError('');
       } else {
-        setLoginError('Login failed: ' + err.message);
+        setLoginError('Invalid Admin ID or Password.');
+      }
+    } else {
+      const emp = employees.find(e => e.nric === identifier && (e.password || e.nric) === password && e.status === 'ACTIVE');
+      if (emp) {
+        setCurrentUser({ id: emp.id, name: emp.name, role: 'TEACHER' });
+        setLoginError('');
+      } else {
+        setLoginError('Invalid NRIC or Password.');
       }
     }
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleLogout = () => {
+    setCurrentUser(null);
     setActiveTab('dashboard');
   };
 
-  // --- FILTERED DATA HELPERS ---
   const visiblePayroll = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === 'SUPER_ADMIN') return payrollRecords;
@@ -365,7 +300,6 @@ const loadEmployeeData = (icNumber: string) => {
     return employees.find(e => e.id === currentUser.id);
   }, [employees, currentUser]);
 
-  // --- ACTION HANDLERS ---
   const handleConnectDrive = async () => {
     if (!settings.googleDriveClientId) {
       alert("Please enter a Google Cloud Client ID in settings first.");
@@ -385,17 +319,12 @@ const loadEmployeeData = (icNumber: string) => {
     try {
       const employeeData = {
         ...newEmp,
-        // We do NOT create Auth user here automatically (requires Admin SDK or cloud functions). 
-        // For now, assume Admin creates Auth user in Console manually.
+        password: newEmp.password || newEmp.nric, // Default to NRIC if no password set
         salaryHistory: [{ date: new Date().toISOString(), amount: newEmp.basicSalary || 0, reason: 'Joined' }],
         documents: [],
         isMalaysian: true,
       };
       await addDoc(collection(db, "employees"), employeeData);
-      
-      // Alert Admin to create the Auth User
-      alert(`Employee Profile Created! \n\nIMPORTANT: Please go to Firebase Console -> Authentication and create a user:\nEmail: ${newEmp.nric}@waypay.hr\nPassword: ${newEmp.password || newEmp.nric}`);
-
       setNewEmp({
         name: '', nric: '', password: '', position: '', basicSalary: 0, status: 'ACTIVE', epfNumber: '', taxNumber: '', bankAccountNumber: '',
         maritalStatus: 'SINGLE', children: 0, joinDate: new Date().toISOString().split('T')[0], leaveBalance: { annual: 12, sick: 14, emergency: 3, annualUsed: 0, sickUsed: 0, emergencyUsed: 0 }
@@ -417,17 +346,22 @@ const loadEmployeeData = (icNumber: string) => {
       if (original && original.basicSalary !== editingEmployee.basicSalary) {
         const diff = editingEmployee.basicSalary - original.basicSalary;
         const type = diff > 0 ? 'Salary Appraisal' : 'Salary Adjustment';
+        
         updatedData = {
           ...updatedData,
           salaryHistory: [
             ...updatedData.salaryHistory, 
-            { date: new Date().toISOString(), amount: updatedData.basicSalary, reason: type }
+            { 
+              date: new Date().toISOString(), 
+              amount: updatedData.basicSalary, 
+              reason: type 
+            }
           ]
         };
       }
-      // Remove ID before sending to Firestore
-      const { id, ...cleanData } = updatedData as any;
-      await updateDoc(doc(db, "employees", editingEmployee.id), cleanData);
+
+      const { id, ...cleanData } = updatedData;
+      await updateDoc(doc(db, "employees", id), cleanData as any);
       setEditingEmployee(null);
     } catch (err) {
       alert("Error updating employee: " + err);
@@ -446,7 +380,6 @@ const loadEmployeeData = (icNumber: string) => {
         
         const record = { 
           employeeId: emp.id, 
-          nric: emp.nric, // <--- ADD THIS LINE (Critical for matching)
           month: processMonth, 
           year: processYear, 
           basicSalary: actualBasic, 
@@ -460,10 +393,12 @@ const loadEmployeeData = (icNumber: string) => {
           ...statutory 
         };
 
-        // Check duplicates (naive check)
-        // In real app, query firestore first. Here we assume we just add.
-        // Better: use setDoc with a unique ID like `payroll_${emp.id}_${month}_${year}`
-        await addDoc(collection(db, "payroll"), record);
+        const existing = payrollRecords.find(r => r.employeeId === emp.id && r.month === processMonth && r.year === processYear);
+        if (existing) {
+          await updateDoc(doc(db, "payroll", existing.id), record);
+        } else {
+          await addDoc(collection(db, "payroll"), record);
+        }
       }
       setShowProcessModal(false);
       setActiveTab('payroll');
@@ -497,6 +432,21 @@ const loadEmployeeData = (icNumber: string) => {
           "leaveBalance.emergencyUsed": 0
         });
       }
+
+      await addDoc(collection(db, "requests"), {
+        category: 'leave',
+        employeeId: 'SYSTEM',
+        employeeName: 'System Admin',
+        type: LeaveType.RESET,
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        date: new Date().toISOString(),
+        days: 0,
+        reason: 'Annual Leave Cycle Reset',
+        status: 'APPROVED',
+        approvedBy: currentUser?.name
+      });
+      
       alert("Success: All staff leave balances have been reset.");
     }
   };
@@ -506,28 +456,15 @@ const loadEmployeeData = (icNumber: string) => {
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     
-    // Logic to find the right employee (Admin selects, User is auto-detected)
     let empId = (currentUser?.role === 'SUPER_ADMIN') ? formData.get('employeeId') as string : currentUser?.id || '';
-    
-    // Fallback: If empId is empty (sometimes happens on first load), try to find by NRIC from login
-    if (!empId && currentUser?.email) {
-       const icFromLogin = currentUser.email.replace('@waypay.hr', '').split('@')[0];
-       const foundEmp = employees.find(e => e.nric === icFromLogin);
-       if (foundEmp) empId = foundEmp.id;
-    }
-
     const emp = employees.find(e => e.id === empId);
     
-    if (!emp) {
-        alert("Error: Could not identify employee. Please try logging out and in again.");
-        return;
-    }
+    if (!emp) return;
 
     const newRequest = {
       category: 'leave',
       employeeId: emp.id, 
       employeeName: emp.name,
-      nric: emp.nric, // <--- CRITICAL: This is what we filter by!
       type: formData.get('type') as LeaveType,
       startDate: formData.get('startDate') as string,
       endDate: formData.get('endDate') as string,
@@ -539,7 +476,6 @@ const loadEmployeeData = (icNumber: string) => {
     
     await addDoc(collection(db, "requests"), newRequest);
     setShowAddLeaveModal(false);
-    alert("Leave submitted successfully!");
   };
 
   const handleApproveLeave = async (leaveId: string) => {
@@ -567,38 +503,25 @@ const loadEmployeeData = (icNumber: string) => {
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     
     let empId = (currentUser?.role === 'SUPER_ADMIN') ? formData.get('employeeId') as string : currentUser?.id || '';
-    
-    // Fallback logic
-    if (!empId && currentUser?.email) {
-       const icFromLogin = currentUser.email.replace('@waypay.hr', '').split('@')[0];
-       const foundEmp = employees.find(e => e.nric === icFromLogin);
-       if (foundEmp) empId = foundEmp.id;
-    }
-
     const emp = employees.find(e => e.id === empId);
     
-    if (!emp || !newClaim.amount) {
-        alert("Please enter an amount.");
-        return;
-    }
+    if (!emp || !newClaim.amount) return;
 
     const claim = {
       category: 'claim',
       employeeId: emp.id, 
       employeeName: emp.name, 
-      nric: emp.nric, // <--- CRITICAL: This is what we filter by!
       amount: newClaim.amount, 
       description: newClaim.description, 
       date: new Date().toISOString(), 
       status: 'APPLIED',
-      attachmentUrl: newClaim.attachmentUrl || "",
-      attachmentName: newClaim.attachmentName || ""
+      attachmentUrl: newClaim.attachmentUrl,
+      attachmentName: newClaim.attachmentName
     };
     
     await addDoc(collection(db, "requests"), claim);
     setShowAddClaimModal(false);
     setNewClaim({ amount: 0, description: '', attachmentUrl: '', attachmentName: '' });
-    alert("Claim submitted successfully!");
   };
 
   const handleClaimFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -744,19 +667,6 @@ const loadEmployeeData = (icNumber: string) => {
     return { total, successful, pending, rejected };
   }, [visibleClaims]);
 
-  // --- RENDER VIEW 1: LOADING SCREEN ---
-  if (loadingAuth) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-         <div className="text-white flex flex-col items-center">
-            <RefreshCw className="animate-spin mb-4 text-indigo-500" size={32} />
-            <p className="font-bold tracking-widest text-xs uppercase opacity-50">Initializing Secure Connection...</p>
-         </div>
-      </div>
-    );
-  }
-
-  // --- RENDER VIEW 2: LOGIN SCREEN ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -766,52 +676,38 @@ const loadEmployeeData = (icNumber: string) => {
               <ShieldCheck size={40} className="text-white" />
             </div>
             <h1 className="text-3xl font-black tracking-tight">Way-Pay HR</h1>
-            <p className="opacity-80 text-sm font-bold uppercase tracking-widest mt-2">Secure Cloud Portal</p>
+            <p className="opacity-80 text-sm font-bold uppercase tracking-widest mt-2">Center Management Portal</p>
           </div>
           <form onSubmit={handleLogin} className="p-10 space-y-6">
             {loginError && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 flex items-center gap-3"><AlertCircle size={18}/> {loginError}</div>}
-            
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Access Credential (NRIC or 'admin')</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Role Type</label>
+              <select name="role" className="w-full border-2 border-slate-100 rounded-2xl p-4 font-bold bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer">
+                <option value="TEACHER">Teacher / Academic Staff</option>
+                <option value="SUPER_ADMIN">System Administrator</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Access Credential (NRIC / ID)</label>
               <div className="relative">
                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400"><User size={20}/></div>
-                 <input 
-                   name="identifier" 
-                   type="text" 
-                   placeholder="e.g. 900101075555" 
-                   value={loginIdentifier}
-                   onChange={(e) => setLoginIdentifier(e.target.value)}
-                   className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" 
-                   required 
-                 />
+                 <input name="identifier" type="text" placeholder="NRIC or Admin ID" className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" required />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
               <div className="relative">
                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400"><Lock size={20}/></div>
-                 <input 
-                   name="password" 
-                   type="password" 
-                   placeholder="••••••••" 
-                   value={loginPassword}
-                   onChange={(e) => setLoginPassword(e.target.value)}
-                   className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" 
-                   required 
-                 />
+                 <input name="password" type="password" placeholder="••••••••" className="w-full border-2 border-slate-100 rounded-2xl p-4 pl-12 font-bold focus:border-indigo-500 outline-none transition-all" required />
               </div>
             </div>
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all">
-                Login
-            </button>
-            <p className="text-center text-[10px] text-slate-400 font-medium">Authentication via Google Firebase™</p>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-700 transition-all">Secure Login</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // --- RENDER VIEW 3: MAIN APP (DASHBOARD) ---
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden print:bg-white text-slate-900">
       <aside className={`bg-slate-950 text-white transition-all duration-500 ${isSidebarOpen ? 'w-72' : 'w-24'} flex flex-col print:hidden shadow-2xl z-50`}>
@@ -1584,7 +1480,7 @@ const loadEmployeeData = (icNumber: string) => {
           </div>
         </div>
       )}
-      </main> 
+      </main> {/* <--- INSERT THIS LINE HERE */}
     </div>
   );
 }
