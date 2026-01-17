@@ -206,7 +206,7 @@ export default function App() {
     });
   };
 
-  const loadEmployeeData = (icNumber: string) => {
+const loadEmployeeData = (icNumber: string) => {
     // 1. Find Employee Profile by IC to get real ID and Name
     const q = query(collection(db, "employees"), where("nric", "==", icNumber));
     onSnapshot(q, (snapshot) => {
@@ -216,30 +216,31 @@ export default function App() {
         
         // Update Current User with real Name and Firestore ID
         setCurrentUser(prev => prev ? { ...prev, id: empId, name: empData.name } : null);
-        setEmployees([{ id: empId, ...empData }]); // Employee only sees themselves in list
+        setEmployees([{ id: empId, ...empData }]); 
       }
     });
 
-    // 2. Listen for MY Requests (Filtered by IC or ID)
-    // Note: To be safe, we query by 'icNumber' if your data uses that, or 'employeeId'
-    // This code assumes data was saved with 'employeeId'. If you used IC in the previous step, change this.
-    // For robust security, use Rules. Here we filter client-side for simplicity of the prototype.
+    // 2. Listen for MY Requests (Filter by IC OR ID to be safe)
     onSnapshot(query(collection(db, "requests"), orderBy("date", "desc")), (snapshot) => {
        const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-       // Filter locally for the logged-in user
-       // Note: In production, use 'where("employeeId", "==", empId)' in the query
-       const myRequests = allRequests.filter((r: any) => r.employeeId === icNumber || r.employeeId === currentUser?.id || r.nric === icNumber); 
        
-       setLeaves(allRequests.filter((r: any) => r.category === 'leave' && (r.nric === icNumber || r.employeeId === currentUser?.id)) as any); // Modified to filter
-       setClaims(allRequests.filter((r: any) => r.category === 'claim' && (r.nric === icNumber || r.employeeId === currentUser?.id)) as any);
+       // SMART FILTER: Check both NRIC and ID matches
+       const myLeaves = allRequests.filter((r: any) => 
+         r.category === 'leave' && (r.nric === icNumber || r.employeeId === currentUser?.id)
+       );
+       const myClaims = allRequests.filter((r: any) => 
+         r.category === 'claim' && (r.nric === icNumber || r.employeeId === currentUser?.id)
+       );
+
+       setLeaves(myLeaves);
+       setClaims(myClaims);
     });
     
-     // 3. Payroll (Filtered)
-     const payrollQ = query(collection(db, "payroll"), where("employeeId", "==", currentUser?.id)); 
-     // *Note: This might fail initially if currentUser.id is not set yet. 
-     // Ideally, we wait for the profile load. For now, we listen to all and filter in UI (less secure but works for prototype).
+     // 3. Payroll (Smart Filter)
      onSnapshot(collection(db, "payroll"), (snapshot) => {
-        setPayrollRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayrollRecord)));
+        const allPayroll = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayrollRecord));
+        // Filter explicitly by the IC Number derived from login
+        setPayrollRecords(allPayroll.filter(p => p.employeeId === currentUser?.id || (p as any).nric === icNumber));
      });
   };
 
@@ -445,6 +446,7 @@ export default function App() {
         
         const record = { 
           employeeId: emp.id, 
+          nric: emp.nric, // <--- ADD THIS LINE (Critical for matching)
           month: processMonth, 
           year: processYear, 
           basicSalary: actualBasic, 
@@ -504,15 +506,28 @@ export default function App() {
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     
+    // Logic to find the right employee (Admin selects, User is auto-detected)
     let empId = (currentUser?.role === 'SUPER_ADMIN') ? formData.get('employeeId') as string : currentUser?.id || '';
+    
+    // Fallback: If empId is empty (sometimes happens on first load), try to find by NRIC from login
+    if (!empId && currentUser?.email) {
+       const icFromLogin = currentUser.email.replace('@waypay.hr', '').split('@')[0];
+       const foundEmp = employees.find(e => e.nric === icFromLogin);
+       if (foundEmp) empId = foundEmp.id;
+    }
+
     const emp = employees.find(e => e.id === empId);
-    if (!emp) return;
+    
+    if (!emp) {
+        alert("Error: Could not identify employee. Please try logging out and in again.");
+        return;
+    }
 
     const newRequest = {
       category: 'leave',
       employeeId: emp.id, 
       employeeName: emp.name,
-      nric: emp.nric, // Add NRIC for easier filtering
+      nric: emp.nric, // <--- CRITICAL: This is what we filter by!
       type: formData.get('type') as LeaveType,
       startDate: formData.get('startDate') as string,
       endDate: formData.get('endDate') as string,
@@ -521,8 +536,10 @@ export default function App() {
       reason: formData.get('reason') as string,
       status: 'PENDING'
     };
+    
     await addDoc(collection(db, "requests"), newRequest);
     setShowAddLeaveModal(false);
+    alert("Leave submitted successfully!");
   };
 
   const handleApproveLeave = async (leaveId: string) => {
@@ -550,24 +567,38 @@ export default function App() {
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     
     let empId = (currentUser?.role === 'SUPER_ADMIN') ? formData.get('employeeId') as string : currentUser?.id || '';
+    
+    // Fallback logic
+    if (!empId && currentUser?.email) {
+       const icFromLogin = currentUser.email.replace('@waypay.hr', '').split('@')[0];
+       const foundEmp = employees.find(e => e.nric === icFromLogin);
+       if (foundEmp) empId = foundEmp.id;
+    }
+
     const emp = employees.find(e => e.id === empId);
-    if (!emp || !newClaim.amount) return;
+    
+    if (!emp || !newClaim.amount) {
+        alert("Please enter an amount.");
+        return;
+    }
 
     const claim = {
       category: 'claim',
       employeeId: emp.id, 
       employeeName: emp.name, 
-      nric: emp.nric,
+      nric: emp.nric, // <--- CRITICAL: This is what we filter by!
       amount: newClaim.amount, 
       description: newClaim.description, 
       date: new Date().toISOString(), 
       status: 'APPLIED',
-      attachmentUrl: newClaim.attachmentUrl,
-      attachmentName: newClaim.attachmentName
+      attachmentUrl: newClaim.attachmentUrl || "",
+      attachmentName: newClaim.attachmentName || ""
     };
+    
     await addDoc(collection(db, "requests"), claim);
     setShowAddClaimModal(false);
     setNewClaim({ amount: 0, description: '', attachmentUrl: '', attachmentName: '' });
+    alert("Claim submitted successfully!");
   };
 
   const handleClaimFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
