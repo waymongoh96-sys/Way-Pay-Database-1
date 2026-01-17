@@ -169,7 +169,15 @@ export default function App() {
       setLoadingAuth(false);
     });
 
-    return () => unsubscribeAuth();
+    // Safety Timer: If Firebase is slow, force the screen to load after 3 seconds
+    const safetyTimer = setTimeout(() => {
+        setLoadingAuth(false);
+    }, 3000);
+
+    return () => {
+        unsubscribeAuth();
+        clearTimeout(safetyTimer);
+    };
   }, []);
 
   // --- DATA LOADING FUNCTIONS ---
